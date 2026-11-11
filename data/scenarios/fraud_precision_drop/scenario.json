@@ -1,0 +1,52 @@
+{
+  "id": "fraud_precision_drop",
+  "title": "Fraud model precision drop after deployment",
+  "question": "Our fraud detection model's precision dropped from 92% to 71% following yesterday's deployment. Investigate the probable root cause.",
+  "now": "2026-11-11T09:00:00Z",
+  "model": "fraud-detector",
+  "ground_truth": {
+    "root_cause": {
+      "component": "fraud-preproc",
+      "deployment_id": "DEP-2026-11-10-02",
+      "commit": "9f3c2e1",
+      "feature": "amount_log_scaled",
+      "mechanism_keywords": [
+        "log1p",
+        "pre_transform"
+      ]
+    },
+    "distractors": [
+      {
+        "id": "node_pool_upgrade",
+        "keywords": [
+          "node pool",
+          "platform-infra",
+          "DEP-2026-11-10-01",
+          "kubernetes",
+          "k8s"
+        ]
+      },
+      {
+        "id": "label_lag",
+        "keywords": [
+          "label coverage",
+          "label_coverage",
+          "label lag",
+          "label-pipeline"
+        ]
+      },
+      {
+        "id": "dashboard_change",
+        "keywords": [
+          "dashboard",
+          "DEP-2026-11-10-03"
+        ]
+      }
+    ],
+    "expected_action": {
+      "action_type": "rollback_deployment",
+      "target": "fraud-preproc",
+      "to_version": "v3.7.2"
+    }
+  }
+}

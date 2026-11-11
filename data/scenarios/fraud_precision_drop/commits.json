@@ -1,0 +1,109 @@
+[
+  {
+    "sha": "9f3c2e1",
+    "service": "fraud-preproc",
+    "author": "d.ferreira",
+    "committed_at": "2026-11-07T15:44:00Z",
+    "message": "refactor(features): consolidate numeric scalers into ScalerRegistry\n\nMove per-feature scaler code into a config-driven registry. No behavior change intended.",
+    "files": [
+      {
+        "path": "src/fraud_preproc/features/numeric.py",
+        "diff": "@@ -1,24 +1,14 @@\n import numpy as np\n-from fraud_preproc.scalers import load_scaler\n-\n-_AMOUNT = load_scaler(\"scalers/amount_v3.pkl\")\n-_GEO = load_scaler(\"scalers/geo_v2.pkl\")\n-_AGE = load_scaler(\"scalers/account_age_v1.pkl\")\n-\n-def amount_log_scaled(df):\n-    return _AMOUNT.transform(np.log1p(df[\"amount_usd\"]).to_frame()).ravel()\n-\n-def geo_distance_log_scaled(df):\n-    return _GEO.transform(np.log1p(df[\"geo_km\"]).to_frame()).ravel()\n-\n-def account_age_days_scaled(df):\n-    return _AGE.transform(df[\"account_age_days\"].clip(upper=3650).to_frame()).ravel()\n+from fraud_preproc.scalers.registry import ScalerRegistry\n+\n+_REGISTRY = ScalerRegistry.from_config(\"config/transforms.yaml\")\n+\n+def amount_log_scaled(df):\n+    return _REGISTRY.apply(\"amount\", df)\n+\n+def geo_distance_log_scaled(df):\n+    return _REGISTRY.apply(\"geo_distance\", df)\n+\n+def account_age_days_scaled(df):\n+    return _REGISTRY.apply(\"account_age\", df)\n"
+      },
+      {
+        "path": "src/fraud_preproc/scalers/registry.py",
+        "diff": "@@ -0,0 +1,22 @@\n+import numpy as np, yaml\n+from fraud_preproc.scalers import load_scaler\n+\n+PRE_TRANSFORMS = {\"none\": lambda s: s, \"log1p\": np.log1p}\n+\n+class ScalerRegistry:\n+    def __init__(self, cfg):\n+        self.cfg = cfg\n+        self.scalers = {k: load_scaler(v[\"artifact\"]) for k, v in cfg.items()}\n+\n+    @classmethod\n+    def from_config(cls, path):\n+        return cls(yaml.safe_load(open(path))[\"scalers\"])\n+\n+    def apply(self, name, df):\n+        c = self.cfg[name]\n+        col = df[c[\"column\"]]\n+        if \"clip_max\" in c:\n+            col = col.clip(upper=c[\"clip_max\"])\n+        col = PRE_TRANSFORMS[c.get(\"pre_transform\", \"none\")](col)\n+        return self.scalers[name].transform(col.to_frame()).ravel()\n"
+      },
+      {
+        "path": "config/transforms.yaml",
+        "diff": "@@ -0,0 +1,14 @@\n+scalers:\n+  amount:\n+    artifact: scalers/amount_v3.pkl\n+    column: amount_usd\n+  geo_distance:\n+    artifact: scalers/geo_v2.pkl\n+    column: geo_km\n+    pre_transform: log1p\n+  account_age:\n+    artifact: scalers/account_age_v1.pkl\n+    column: account_age_days\n+    clip_max: 3650\n"
+      },
+      {
+        "path": "tests/test_registry.py",
+        "diff": "@@ -0,0 +1,9 @@\n+from fraud_preproc.scalers.registry import ScalerRegistry\n+\n+def test_registry_loads_all_scalers():\n+    reg = ScalerRegistry.from_config(\"config/transforms.yaml\")\n+    assert set(reg.scalers) == {\"amount\", \"geo_distance\", \"account_age\"}\n"
+      }
+    ]
+  },
+  {
+    "sha": "4b7d0aa",
+    "service": "fraud-preproc",
+    "author": "dependabot",
+    "committed_at": "2026-11-08T09:10:00Z",
+    "message": "chore(deps): bump pandas from 2.2.3 to 2.3.1",
+    "files": [
+      {
+        "path": "requirements.txt",
+        "diff": "@@ -3,1 +3,1 @@\n-pandas==2.2.3\n+pandas==2.3.1\n"
+      }
+    ]
+  },
+  {
+    "sha": "c81e5f2",
+    "service": "fraud-preproc",
+    "author": "a.nguyen",
+    "committed_at": "2026-11-09T11:27:00Z",
+    "message": "feat(features): add merchant_category_v2 (shadow mode, logged only)",
+    "files": [
+      {
+        "path": "src/fraud_preproc/features/categorical.py",
+        "diff": "@@ -40,0 +41,8 @@\n+def merchant_category_v2(df, mcc_map):\n+    \"\"\"Shadow feature for fraud-detector v13. Logged to feature store; NOT in the v12 vector.\"\"\"\n+    return df[\"mcc\"].map(mcc_map).fillna(\"unknown\")\n"
+      },
+      {
+        "path": "src/fraud_preproc/pipeline.py",
+        "diff": "@@ -88,2 +88,3 @@\n     vector = assemble_v12(features)\n+    shadow_log.write({\"merchant_category_v2\": merchant_category_v2(df, MCC_MAP)})\n     return vector\n"
+      }
+    ]
+  },
+  {
+    "sha": "e4a19b0",
+    "service": "fraud-preproc",
+    "author": "m.okafor",
+    "committed_at": "2026-10-20T17:02:00Z",
+    "message": "fix(velocity): off-by-one at hour boundary in txn_velocity_1h",
+    "files": [
+      {
+        "path": "src/fraud_preproc/features/velocity.py",
+        "diff": "@@ -12,1 +12,1 @@\n-    window = (ts - 3600, ts)\n+    window = (ts - 3600, ts]\n"
+      }
+    ]
+  },
+  {
+    "sha": "77d0c3e",
+    "service": "feature-ingest",
+    "author": "j.lindqvist",
+    "committed_at": "2026-11-03T12:40:00Z",
+    "message": "feat(enrichment): exponential backoff for device API timeouts",
+    "files": [
+      {
+        "path": "ingest/enrich/device.py",
+        "diff": "@@ -30,1 +30,2 @@\n-    resp = client.get(url, timeout=0.05)\n+    resp = retry(lambda: client.get(url, timeout=0.05), attempts=2, backoff=0.01)\n"
+      }
+    ]
+  },
+  {
+    "sha": "b2f6e91",
+    "service": "decision-service",
+    "author": "s.haddad",
+    "committed_at": "2026-11-05T14:00:00Z",
+    "message": "feat(events): add reason_codes to fraud.decision",
+    "files": [
+      {
+        "path": "decision/events.py",
+        "diff": "@@ -21,0 +22,1 @@\n+        \"reason_codes\": explain_top_k(score_ctx, k=3),\n"
+      }
+    ]
+  },
+  {
+    "sha": "0aa4d57",
+    "service": "fraud-monitoring-dashboard",
+    "author": "d.ferreira",
+    "committed_at": "2026-11-10T15:20:00Z",
+    "message": "dash: hourly precision default; add out_of_range panel",
+    "files": [
+      {
+        "path": "dashboards/fraud.json",
+        "diff": "@@ -102,1 +102,1 @@\n-  \"expr\": \"avg_over_time(fraud_precision[24h])\"\n+  \"expr\": \"fraud_precision\"\n"
+      }
+    ]
+  }
+]
