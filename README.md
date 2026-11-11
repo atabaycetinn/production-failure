@@ -90,3 +90,7 @@ The heuristic finds the right deployment from timing and drift ownership. It can
 - **Better retrieval:** implement `Retriever.search` (hybrid/dense + rerank). The tool contract stays the same.
 - **New scenarios:** add `data/scenarios/<name>/` with the same files and a `ground_truth` block.
 - **Real remediation:** implement `Executor.run` for your deploy or flag system. Approval checks stay in `actions.execute`.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
